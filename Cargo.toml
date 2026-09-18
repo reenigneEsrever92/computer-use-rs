@@ -1,0 +1,51 @@
+[package]
+name = "desktop-use"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+description = "An MCP server that lets an AI agent observe and control a Wayland Linux desktop."
+repository = "https://github.com/felix/desktop-use-rs"
+
+[features]
+default = ["preview"]
+# Gates the `--preview` window and the GUI dependency tree it needs, so headless
+# builds can drop it with `--no-default-features`.
+preview = ["dep:eframe"]
+
+[dependencies]
+# The stdio transport is not in rmcp's default feature set.
+rmcp = { version = "1.7.0", features = ["transport-io"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+serde = { version = "1", features = ["derive"] }
+# The tools report their metadata as JSON, and MCP's own encoding is JSON.
+serde_json = "1"
+# Must be a direct dependency at 1.x: the tool macro derives reference bare
+# `schemars::` paths, and rmcp requires the 1.x `JsonSchema` trait.
+schemars = "1.0"
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# The portal, which is how capture and input are negotiated on Wayland. Default
+# features select the tokio runtime; do not enable its `pipewire` feature, which
+# pulls in a second, incompatible pipewire version.
+ashpd = "0.12"
+# The compositor delivers captured frames as PipeWire buffers. Do not rename this
+# dependency: the pod macros expand to paths spelled `pipewire::spa::...`.
+pipewire = "0.9"
+# Encodes captured frames for the screenshot tool. Only the two formats the tool
+# offers are enabled; the rest of the crate's codecs are dead weight here.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# MCP image content is base64 text, so something has to produce it.
+base64 = "0.22"
+# The `--preview` window. Wayland-only and wgpu-backed, matching where this project
+# runs; the x11, accessibility, and link-opening features are left off because a
+# display-only window needs none of them.
+eframe = { version = "0.36", optional = true, default-features = false, features = [
+    "wgpu",
+    "wayland",
+    "default_fonts",
+] }
+
+[dev-dependencies]
