@@ -1,7 +1,7 @@
 ---
 type: Changelog
 title: Changelog
-description: Shipped changes to desktop-use, newest first.
+description: Shipped changes to computer-use, newest first.
 tags: [dev, changelog]
 status: draft
 ---
@@ -12,6 +12,11 @@ Shipped changes, newest first.
 
 ## 2026-09-19
 
+- **Rename the project to computer-use** — the crate and binary become
+  `computer-use`, the library target `computer_use`, the MCP server name and log
+  filter `computer-use` and `COMPUTER_USE_LOG`, and the consent token moves to
+  `$XDG_STATE_HOME/computer-use/`, so the next run asks for consent again. See
+  [Rename the project to computer-use](backlog/rename-project-to-computer-use.md).
 - **RemoteDesktop input backend** — adds the `mouse_move`, `mouse_click`,
   `mouse_scroll`, `type_text`, and `key_press` tools, injecting through the
   portal's `RemoteDesktop` interface on the session capture already negotiated;

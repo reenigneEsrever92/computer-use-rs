@@ -11,7 +11,7 @@ pub const DEFAULT_MAX_DIMENSION: u32 = 1568;
 /// An MCP server that lets an AI agent observe and control a Wayland Linux
 /// desktop.
 #[derive(Debug, Clone, Parser)]
-#[command(name = "desktop-use", version, about, long_about = None)]
+#[command(name = "computer-use", version, about, long_about = None)]
 pub struct Cli {
     /// Open a window showing the frames the model sees.
     ///
@@ -66,7 +66,7 @@ mod tests {
 
     #[test]
     fn defaults_match_the_documented_values() {
-        let cli = Cli::parse_from(["desktop-use"]);
+        let cli = Cli::parse_from(["computer-use"]);
         assert!(!cli.preview);
         assert_eq!(cli.max_dimension, DEFAULT_MAX_DIMENSION);
         assert_eq!(cli.format, ImageFormat::Png);
@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn flags_are_accepted() {
         let cli = Cli::parse_from([
-            "desktop-use",
+            "computer-use",
             "--preview",
             "--max-dimension",
             "512",

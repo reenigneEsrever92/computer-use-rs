@@ -1,4 +1,4 @@
-//! The `desktop-use` binary.
+//! The `computer-use` binary.
 //!
 //! Everything substantial lives in the library; this is the entry point, which
 //! parses the flags, checks that there is a session to serve, and then hands the
@@ -8,9 +8,9 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use clap::Parser;
-use desktop_use::cli::Cli;
-use desktop_use::error::Error;
-use desktop_use::{backend, logging, mcp, session};
+use computer_use::cli::Cli;
+use computer_use::error::Error;
+use computer_use::{backend, logging, mcp, session};
 use tracing::{info, warn};
 
 fn main() -> ExitCode {
@@ -71,7 +71,7 @@ fn run(cli: Cli) -> Result<(), Error> {
 #[cfg(feature = "preview")]
 fn with_preview(
     backends: Arc<backend::Backends>,
-    defaults: desktop_use::tools::ToolDefaults,
+    defaults: computer_use::tools::ToolDefaults,
 ) -> Result<(), Error> {
     let serving = Arc::clone(&backends);
 
@@ -83,7 +83,7 @@ fn with_preview(
         })
         .map_err(Error::Runtime)?;
 
-    let window = desktop_use::preview::run(Arc::clone(&backends));
+    let window = computer_use::preview::run(Arc::clone(&backends));
 
     // If the window never opened there is nothing to wait for, and blocking on
     // the server would hang the process for as long as the client stayed

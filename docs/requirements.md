@@ -24,7 +24,7 @@ compositors its users actually run (GNOME, KDE, wlroots).
 
 ### Human operator (secondary)
 
-A developer who runs `desktop-use` on their own workstation, either to let an
+A developer who runs `computer-use` on their own workstation, either to let an
 assistant drive the machine or to watch and debug what an agent is doing.
 Technically strong, but not necessarily fluent in Wayland internals.
 
@@ -42,16 +42,16 @@ Each use case is written so that an acceptance criterion can be derived from it.
   returned image, and the metadata coordinates can be passed back to the input
   tools unchanged.
 - **UC2 — Click a target** (agent developer): given a coordinate identified from
-  a screenshot, when the agent calls `mouse_move` followed by `mouse_click`,
+  a screenshot, when the agent calls `mouse_move` followed by `left_click`,
   then the pointer moves and the click is delivered to the application under it.
   Success: a following screenshot shows the click's effect.
 - **UC3 — Type text** (agent developer): given a focused text field, when the
   agent calls `type_text` with a UTF-8 string, then the field contains that text.
 - **UC4 — Send a shortcut** (agent developer): given an application with
-  keyboard shortcuts, when the agent calls `key_press` with a key and modifiers,
+  keyboard shortcuts, when the agent calls `key` with a key and modifiers,
   then the application handles the shortcut.
 - **UC5 — Scroll a view** (agent developer): given a scrollable view, when the
-  agent calls `mouse_scroll`, then the view scrolls by the requested amount.
+  agent calls `scroll`, then the view scrolls by the requested amount.
 - **UC6 — Consent once** (agent developer): given the server has never run, when
   the agent first captures the screen, then the user is prompted for consent
   exactly once, and later runs reuse that consent without prompting.
@@ -95,8 +95,8 @@ out.
 | --- | --- | --- | --- | --- |
 | R1 | Capture the desktop through the portal `ScreenCast` interface and receive frames over PipeWire. | UC1 | high | yes |
 | R2 | Establish one portal session per process, persist the user's source choice with a `restore_token`, and reuse it on later runs, so consent is requested once. | UC6 | high | yes |
-| R3 | Expose the observe and control operations as MCP tools over stdio: `screenshot`, `get_display_info`, `mouse_move`, `mouse_click`, `mouse_scroll`, `type_text`, and `key_press`. | UC1–UC5 | high | yes |
-| R4 | Inject pointer and keyboard input through the portal `RemoteDesktop` interface: absolute pointer motion, buttons with a click count, scroll, UTF-8 text, and key combinations with modifiers. | UC2–UC5 | high | yes |
+| R3 | Expose the observe and control operations as MCP tools over stdio: `screenshot` and `zoom` for observation; `get_display_info` and `cursor_position` for geometry; `mouse_move`, `left_click`, `right_click`, `middle_click`, `double_click`, `triple_click`, `left_click_drag`, `left_mouse_down`, `left_mouse_up`, and `scroll` for the pointer; `type`, `key`, and `hold_key` for the keyboard; and `wait` and `wait_for_change` for timing. | UC1–UC5 | high | yes |
+| R4 | Inject pointer and keyboard input through the portal `RemoteDesktop` interface: absolute pointer motion, pointer button presses and releases — so clicks, drags, and holds are all expressible — scroll, UTF-8 text, and key presses, holds, and combinations. Modifiers can be held around a click, drag, or scroll rather than only as part of a key combination. | UC2–UC5 | high | yes |
 | R5 | Return captured frames as MCP image content — PNG by default, JPEG opt-in — and accept a `max_dimension`, so an agent can bound the cost of a screenshot it takes in a loop. | UC1 | high | yes |
 | R6 | Normalize coordinates across the logical desktop, the captured stream's pixels, and the scale factor, so a coordinate read from `screenshot` or `get_display_info` is accepted unchanged by the input tools. | UC9 | high | yes |
 | R7 | Provide a `--preview` window showing the frames the model sees, so the human operator can watch the session. | UC7 | medium | yes |
@@ -155,5 +155,4 @@ Listed so that later change requests can pick them up:
 - An HTTP/SSE MCP transport.
 - Multi-monitor and window-scoped capture, and capture of virtual outputs.
 - Video or recording output, and OCR.
-- A `wait` tool for agents that need to let an application settle.
 - Excluding the preview window from what is captured.

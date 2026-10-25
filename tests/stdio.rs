@@ -10,7 +10,7 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 
 /// A command for the binary with a complete session environment.
 fn session_command() -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_desktop-use"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_computer-use"));
     command
         .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/0/bus")
         .env("XDG_RUNTIME_DIR", "/run/user/0")
@@ -37,7 +37,7 @@ fn initialize_request() -> String {
         "params": {
             "protocolVersion": "2025-11-25",
             "capabilities": {},
-            "clientInfo": { "name": "desktop-use-test", "version": "0" }
+            "clientInfo": { "name": "computer-use-test", "version": "0" }
         }
     })
     .to_string()
@@ -124,7 +124,7 @@ fn replies_by_id(lines: &[String]) -> Vec<serde_json::Value> {
 fn stdout_carries_only_mcp_traffic() {
     let mut child = piped_command()
         .spawn()
-        .expect("failed to spawn desktop-use");
+        .expect("failed to spawn computer-use");
 
     let (lines, status) = handshake(&mut child);
     assert!(status.success(), "the server exited with {status}");
@@ -144,7 +144,7 @@ fn stdout_carries_only_mcp_traffic() {
 fn logs_never_reach_stdout() {
     let mut child = piped_command()
         .spawn()
-        .expect("failed to spawn desktop-use");
+        .expect("failed to spawn computer-use");
 
     let (lines, _status) = handshake(&mut child);
 
@@ -160,7 +160,7 @@ fn logs_never_reach_stdout() {
 fn initialize_succeeds() {
     let mut child = piped_command()
         .spawn()
-        .expect("failed to spawn desktop-use");
+        .expect("failed to spawn computer-use");
 
     let (lines, _status) = handshake(&mut child);
     let replies = replies_by_id(&lines);
@@ -174,16 +174,16 @@ fn initialize_succeeds() {
         "initialize failed: {initialize}"
     );
     assert_eq!(
-        initialize["result"]["serverInfo"]["name"], "desktop-use",
+        initialize["result"]["serverInfo"]["name"], "computer-use",
         "unexpected server name: {initialize}"
     );
 }
 
 #[test]
-fn the_observation_tools_are_listed() {
+fn the_tool_surface_is_listed() {
     let mut child = piped_command()
         .spawn()
-        .expect("failed to spawn desktop-use");
+        .expect("failed to spawn computer-use");
 
     let (lines, _status) = handshake(&mut child);
     let replies = replies_by_id(&lines);
@@ -201,18 +201,43 @@ fn the_observation_tools_are_listed() {
         .filter_map(|tool| tool["name"].as_str())
         .collect();
 
-    assert!(names.contains(&"screenshot"), "tools listed: {names:?}");
-    assert!(
-        names.contains(&"get_display_info"),
-        "tools listed: {names:?}"
-    );
+    for name in [
+        "screenshot",
+        "zoom",
+        "get_display_info",
+        "cursor_position",
+        "mouse_move",
+        "left_click",
+        "right_click",
+        "middle_click",
+        "double_click",
+        "triple_click",
+        "left_click_drag",
+        "left_mouse_down",
+        "left_mouse_up",
+        "scroll",
+        "type",
+        "key",
+        "hold_key",
+        "wait",
+        "wait_for_change",
+    ] {
+        assert!(names.contains(&name), "`{name}` is missing: {names:?}");
+    }
+
+    for removed in ["mouse_click", "mouse_scroll", "type_text", "key_press"] {
+        assert!(
+            !names.contains(&removed),
+            "`{removed}` should have been replaced: {names:?}"
+        );
+    }
 }
 
 #[test]
 fn closing_stdin_shuts_the_server_down_cleanly() {
     let mut child = piped_command()
         .spawn()
-        .expect("failed to spawn desktop-use");
+        .expect("failed to spawn computer-use");
 
     let (_lines, status) = handshake(&mut child);
 
@@ -228,7 +253,7 @@ fn a_missing_session_variable_is_reported_by_name() {
         .env_remove("WAYLAND_DISPLAY")
         .stdin(Stdio::null())
         .output()
-        .expect("failed to run desktop-use");
+        .expect("failed to run computer-use");
 
     assert!(
         !output.status.success(),
@@ -252,7 +277,7 @@ fn preview_reports_that_the_feature_was_not_compiled_in() {
         .arg("--preview")
         .stdin(Stdio::null())
         .output()
-        .expect("failed to run desktop-use");
+        .expect("failed to run computer-use");
 
     assert!(
         !output.status.success(),

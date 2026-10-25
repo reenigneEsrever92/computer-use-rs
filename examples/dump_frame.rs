@@ -11,7 +11,7 @@
 
 use std::process::ExitCode;
 
-use desktop_use::backend::resolve;
+use computer_use::backend::resolve;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -29,7 +29,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .unwrap_or_else(|| "frame.png".to_string());
 
-    desktop_use::logging::init();
+    computer_use::logging::init();
 
     let backends = resolve();
     let capture = backends

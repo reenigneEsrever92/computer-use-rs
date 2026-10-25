@@ -1,6 +1,6 @@
 //! The error type shared by the CLI, the session preflight, and the backends.
 
-/// Anything that prevents `desktop-use` from serving the desktop.
+/// Anything that prevents `computer-use` from serving the desktop.
 ///
 /// Every variant is meant to be actionable on its own. The point of the
 /// diagnostics requirement is that a failure names the missing component and
@@ -10,7 +10,7 @@ pub enum Error {
     /// A required environment variable of the graphical session is absent.
     #[error(
         "not running inside a graphical session: {variable} is not set. \
-         desktop-use must run inside the user's graphical session, not as a system service"
+         computer-use must run inside the user's graphical session, not as a system service"
     )]
     MissingSessionEnv { variable: &'static str },
 
@@ -60,7 +60,7 @@ pub enum Error {
 
     /// The user dismissed the consent prompt.
     #[error(
-        "the screen sharing request was dismissed or denied. desktop-use needs the \
+        "the screen sharing request was dismissed or denied. computer-use needs the \
          user to approve the session"
     )]
     ConsentDenied,

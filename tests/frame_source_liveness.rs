@@ -13,7 +13,7 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use desktop_use::backend::frame_source::FrameSource;
+use computer_use::backend::frame_source::FrameSource;
 
 /// Most significant bit set, and not `PW_ID_ANY`: a node id no real node has.
 const NONEXISTENT_NODE: u32 = 0x7fff_fffe;

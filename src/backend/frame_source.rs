@@ -336,7 +336,7 @@ fn build_stream(
 
     let stream = StreamRc::new(
         core,
-        "desktop-use-capture",
+        "computer-use-capture",
         properties! {
             *pw::keys::MEDIA_TYPE => "Video",
             *pw::keys::MEDIA_CATEGORY => "Capture",

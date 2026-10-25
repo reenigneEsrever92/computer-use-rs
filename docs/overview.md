@@ -1,6 +1,6 @@
 ---
 type: Overview
-title: desktop-use
+title: computer-use
 description: An MCP server that lets an AI agent observe and control a Wayland Linux desktop.
 tags: [wayland, mcp, automation]
 status: draft
@@ -8,17 +8,18 @@ status: draft
 
 # Overview
 
-`desktop-use` is a Model Context Protocol (MCP) server that gives an AI agent
+`computer-use` is a Model Context Protocol (MCP) server that gives an AI agent
 eyes and hands on a Linux desktop. An agent connects to it over stdio and calls
 its tools to capture the screen — receiving the image as MCP image content — and
-to move the pointer, click, scroll, type text, and send keyboard shortcuts.
+to move the pointer, click, drag, hold, scroll, type text, and send keyboard
+shortcuts.
 
 The project exists because agents increasingly need to operate ordinary
 graphical applications that expose no API: QA sweeps, filling in forms, GUI
 regression checks, and "open this application and do X" tasks. The desktop is
 the only interface those applications offer, and on Linux that desktop is
 Wayland, which deliberately denies applications the global framebuffer access
-and the input injection that X11 allowed. `desktop-use` works within Wayland's
+and the input injection that X11 allowed. `computer-use` works within Wayland's
 rules rather than around them: the user consents once through the XDG Desktop
 Portal, the compositor streams frames over PipeWire, and input is injected
 through the portal's RemoteDesktop interface.

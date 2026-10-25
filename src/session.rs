@@ -1,6 +1,6 @@
 //! Preflight checks for the graphical session.
 //!
-//! `desktop-use` needs a live graphical session. The portal it negotiates with
+//! `computer-use` needs a live graphical session. The portal it negotiates with
 //! is reached over the session bus, and the compositor delivers frames to a
 //! PipeWire instance rooted in the session's runtime directory. None of that
 //! exists for a system service, so the server checks up front and names exactly

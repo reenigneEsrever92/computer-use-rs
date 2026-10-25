@@ -563,6 +563,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "computer-use"
+version = "0.1.0"
+dependencies = [
+ "ashpd",
+ "base64",
+ "clap",
+ "eframe",
+ "image",
+ "pipewire",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -685,26 +705,6 @@ dependencies = [
  "darling_core",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "desktop-use"
-version = "0.1.0"
-dependencies = [
- "ashpd",
- "base64",
- "clap",
- "eframe",
- "image",
- "pipewire",
- "rmcp",
- "schemars",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

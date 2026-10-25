@@ -16,15 +16,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ashpd::desktop::remote_desktop::{Axis as PortalAxis, DeviceType, KeyState, RemoteDesktop};
+use ashpd::desktop::remote_desktop::{
+    Axis as PortalAxis, DeviceType, KeyState as PortalKeyState, RemoteDesktop,
+};
 use ashpd::desktop::screencast::{CursorMode, Screencast, SourceType, Stream};
 use ashpd::desktop::{PersistMode, Session};
 use tokio::sync::Mutex;
 
 use crate::backend::capture::{BoxFuture, CaptureBackend, CaptureInfo, Frame};
 use crate::backend::frame_source::FrameSource;
-use crate::backend::input::{Axis, Button, InputBackend};
-use crate::backend::keys;
+use crate::backend::input::{Axis, Button, InputBackend, KeyState};
+use crate::backend::keys::Keysym;
 use crate::error::Error;
 
 /// How the screencast interface is identified in errors from the portal.
@@ -179,46 +181,44 @@ impl InputBackend for PortalSession {
         Box::pin(async move {
             let mut guard = self.ensure().await?;
             let established = guard.as_mut().expect("just established");
-            let (remote_desktop, session, node, info) = established.input_parts()?;
 
             // The tools speak logical desktop coordinates; the portal's absolute
             // motion is specified in the stream's pixels. Applying the scale
             // factor here keeps that conversion in the one place it is needed.
-            let (stream_x, stream_y) = info.logical_to_stream((x, y));
+            let (stream_x, stream_y) = established.info.logical_to_stream((x, y));
 
-            remote_desktop
-                .notify_pointer_motion_absolute(session, node, stream_x, stream_y)
-                .await
-                .map_err(|error| Error::Input {
-                    detail: format!("moving the pointer to ({x}, {y}): {error}"),
-                })
+            {
+                let (remote_desktop, session, node, _) = established.input_parts()?;
+                remote_desktop
+                    .notify_pointer_motion_absolute(session, node, stream_x, stream_y)
+                    .await
+                    .map_err(|error| Error::Input {
+                        detail: format!("moving the pointer to ({x}, {y}): {error}"),
+                    })?;
+            }
+
+            // The portal reports no pointer position, so the most this session can
+            // know is where it last sent the pointer. Recording it here is what
+            // makes `cursor_position` and the metadata's pointer field mean
+            // something instead of being permanently null.
+            established.info.pointer = Some((x, y));
+            Ok(())
         })
     }
 
-    fn pointer_button(&self, button: Button, count: u8) -> BoxFuture<'_, Result<(), Error>> {
+    fn pointer_button(&self, button: Button, state: KeyState) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
-            let code = match button {
-                Button::Left => button_code::LEFT,
-                Button::Middle => button_code::MIDDLE,
-                Button::Right => button_code::RIGHT,
-            };
-            let presses = count.max(1);
+            let code = button_code_for(button);
+            let state = to_portal_state(state);
 
             let mut guard = self.ensure().await?;
             let established = guard.as_mut().expect("just established");
             let (remote_desktop, session, _, _) = established.input_parts()?;
 
-            for _ in 0..presses {
-                remote_desktop
-                    .notify_pointer_button(session, code, KeyState::Pressed)
-                    .await
-                    .map_err(input_error)?;
-                remote_desktop
-                    .notify_pointer_button(session, code, KeyState::Released)
-                    .await
-                    .map_err(input_error)?;
-            }
-            Ok(())
+            remote_desktop
+                .notify_pointer_button(session, code, state)
+                .await
+                .map_err(input_error)
         })
     }
 
@@ -248,68 +248,37 @@ impl InputBackend for PortalSession {
         })
     }
 
-    fn type_text(&self, text: String) -> BoxFuture<'_, Result<(), Error>> {
+    fn key(&self, keysym: Keysym, state: KeyState) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
-            let keysyms = keys::text_keysyms(&text);
+            let state = to_portal_state(state);
 
             let mut guard = self.ensure().await?;
             let established = guard.as_mut().expect("just established");
             let (remote_desktop, session, _, _) = established.input_parts()?;
 
-            for keysym in keysyms {
-                press_and_release_key(remote_desktop, session, keysym).await?;
-            }
-            Ok(())
-        })
-    }
-
-    fn key_press(&self, combination: String) -> BoxFuture<'_, Result<(), Error>> {
-        Box::pin(async move {
-            let combination = keys::parse_combination(&combination).map_err(|detail| {
-                Error::Capture(format!("could not read the key combination: {detail}"))
-            })?;
-
-            let mut guard = self.ensure().await?;
-            let established = guard.as_mut().expect("just established");
-            let (remote_desktop, session, _, _) = established.input_parts()?;
-
-            for modifier in &combination.modifiers {
-                remote_desktop
-                    .notify_keyboard_keysym(session, *modifier as i32, KeyState::Pressed)
-                    .await
-                    .map_err(input_error)?;
-            }
-
-            press_and_release_key(remote_desktop, session, combination.key).await?;
-
-            // Released in reverse, so the modifiers come off in the order a hand
-            // would lift them.
-            for modifier in combination.modifiers.iter().rev() {
-                remote_desktop
-                    .notify_keyboard_keysym(session, *modifier as i32, KeyState::Released)
-                    .await
-                    .map_err(input_error)?;
-            }
-
-            Ok(())
+            remote_desktop
+                .notify_keyboard_keysym(session, keysym as i32, state)
+                .await
+                .map_err(input_error)
         })
     }
 }
 
-/// Press a keysym and release it.
-async fn press_and_release_key(
-    remote_desktop: &RemoteDesktop<'static>,
-    session: &Session<'static, RemoteDesktop<'static>>,
-    keysym: u32,
-) -> Result<(), Error> {
-    remote_desktop
-        .notify_keyboard_keysym(session, keysym as i32, KeyState::Pressed)
-        .await
-        .map_err(input_error)?;
-    remote_desktop
-        .notify_keyboard_keysym(session, keysym as i32, KeyState::Released)
-        .await
-        .map_err(input_error)
+/// The evdev code for a named button.
+fn button_code_for(button: Button) -> i32 {
+    match button {
+        Button::Left => button_code::LEFT,
+        Button::Middle => button_code::MIDDLE,
+        Button::Right => button_code::RIGHT,
+    }
+}
+
+/// The portal's spelling of the shared press/release state.
+fn to_portal_state(state: KeyState) -> PortalKeyState {
+    match state {
+        KeyState::Pressed => PortalKeyState::Pressed,
+        KeyState::Released => PortalKeyState::Released,
+    }
 }
 
 /// Map a failure to send an event onto an actionable error.
@@ -612,7 +581,7 @@ fn restore_token_path() -> Option<PathBuf> {
         .or_else(|| {
             std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state"))
         })?;
-    Some(base.join("desktop-use").join("restore-token"))
+    Some(base.join("computer-use").join("restore-token"))
 }
 
 /// Read the stored consent token, if there is one.
@@ -649,7 +618,7 @@ mod tests {
     #[test]
     fn the_token_path_lives_under_the_state_directory() {
         if let Some(path) = restore_token_path() {
-            assert!(path.ends_with("desktop-use/restore-token"), "{path:?}");
+            assert!(path.ends_with("computer-use/restore-token"), "{path:?}");
         }
     }
 

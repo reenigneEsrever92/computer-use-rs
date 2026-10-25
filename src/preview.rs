@@ -40,13 +40,13 @@ enum Update {
 pub fn run(backends: Arc<Backends>) -> Result<(), Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("desktop-use — what the model sees")
+            .with_title("computer-use — what the model sees")
             .with_inner_size([900.0, 600.0]),
         ..Default::default()
     };
 
     eframe::run_native(
-        "desktop-use preview",
+        "computer-use preview",
         options,
         Box::new(move |cc| Ok(Box::new(PreviewApp::new(cc, backends)))),
     )
@@ -103,7 +103,7 @@ impl PreviewApp {
         }
 
         self.texture =
-            Some(context.load_texture("desktop-use-frame", image, egui::TextureOptions::LINEAR));
+            Some(context.load_texture("computer-use-frame", image, egui::TextureOptions::LINEAR));
         self.texture_size = size;
     }
 }

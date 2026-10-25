@@ -125,6 +125,28 @@ fn modifier_keysym(name: &str) -> Option<Keysym> {
     })
 }
 
+/// The modifier keysyms in a list such as `ctrl+shift`.
+///
+/// The click, drag, and scroll tools take modifiers as their own argument rather
+/// than a held key, so this is what turns that argument into the keysyms the
+/// backend presses around the action. An empty string means no modifiers, but a
+/// non-empty one with a name that is not a modifier is an error — silently
+/// dropping it would send a plain click where a modified one was asked for.
+pub fn parse_modifiers(text: &str) -> Result<Vec<Keysym>, String> {
+    let mut keysyms = Vec::new();
+    for part in text
+        .split('+')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+    {
+        let name = part.to_lowercase();
+        let keysym = modifier_keysym(&name)
+            .ok_or_else(|| format!("`{part}` is not a modifier; try ctrl, shift, alt, or super"))?;
+        keysyms.push(keysym);
+    }
+    Ok(keysyms)
+}
+
 /// Parse a combination such as `ctrl+shift+t`.
 ///
 /// Names are case-insensitive, and `plus` is how to write the `+` key, since a
@@ -260,6 +282,30 @@ mod tests {
     #[test]
     fn an_unknown_key_is_rejected() {
         let error = parse_combination("ctrl+nonesuch").expect_err("an error");
+        assert!(error.contains("nonesuch"), "{error}");
+    }
+
+    #[test]
+    fn modifiers_parse_as_a_plus_joined_list() {
+        assert_eq!(
+            parse_modifiers("ctrl+shift").expect("modifiers"),
+            vec![CONTROL, SHIFT]
+        );
+        assert_eq!(parse_modifiers(" shift ").expect("modifiers"), vec![SHIFT]);
+        assert_eq!(parse_modifiers("super").expect("modifiers"), vec![SUPER]);
+    }
+
+    #[test]
+    fn an_empty_modifier_list_means_none() {
+        assert!(parse_modifiers("").expect("modifiers").is_empty());
+        assert!(parse_modifiers("   ").expect("modifiers").is_empty());
+    }
+
+    #[test]
+    fn an_unknown_modifier_is_rejected_rather_than_dropped() {
+        // Dropping it silently would send an unmodified click where the caller
+        // asked for a modified one, which is the failure that matters here.
+        let error = parse_modifiers("ctrl+nonesuch").expect_err("an error");
         assert!(error.contains("nonesuch"), "{error}");
     }
 

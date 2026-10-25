@@ -1,6 +1,6 @@
 # Development
 
-Every change to `desktop-use` — a feature, a bug fix, an improvement, or a
+Every change to `computer-use` — a feature, a bug fix, an improvement, or a
 refactor — is first written down as a change request in the
 [backlog](backlog/index.md). A change request states the problem, the proposal,
 the decisions behind it, and its acceptance criteria; an implementation plan is

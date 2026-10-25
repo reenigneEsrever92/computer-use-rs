@@ -1,4 +1,4 @@
-//! `desktop-use` — an MCP server that lets an AI agent observe and control a
+//! `computer-use` — an MCP server that lets an AI agent observe and control a
 //! Wayland Linux desktop.
 //!
 //! The crate is a library so that the binary, the examples, and the tests all

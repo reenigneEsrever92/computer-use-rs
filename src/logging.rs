@@ -7,7 +7,7 @@
 use tracing_subscriber::EnvFilter;
 
 /// The environment variable that overrides the log filter.
-pub const LOG_FILTER_ENV: &str = "DESKTOP_USE_LOG";
+pub const LOG_FILTER_ENV: &str = "COMPUTER_USE_LOG";
 
 /// The filter used when [`LOG_FILTER_ENV`] is unset or invalid.
 pub const DEFAULT_LOG_FILTER: &str = "info";

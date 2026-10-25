@@ -1,4 +1,4 @@
-# desktop-use
+# computer-use
 
 An MCP server that lets an AI agent observe and control a Wayland Linux desktop.
 
@@ -9,13 +9,14 @@ once and the desktop is never driven invisibly.
 
 **Status:** the first milestone is complete. An agent can capture the screen,
 read the display geometry, and drive the desktop — moving the pointer, clicking,
-scrolling, typing, and sending shortcuts — through one consented portal session.
-GNOME and KDE support capture and input; wlroots compositors are capture-only,
-for the reason in the [compositor support](#compositor-support) matrix.
+dragging, holding, scrolling, typing, and sending shortcuts — through one
+consented portal session. GNOME and KDE support capture and input; wlroots
+compositors are capture-only, for the reason in the
+[compositor support](#compositor-support) matrix.
 
 ## Requirements
 
-A live graphical session. `desktop-use` talks to the compositor through the
+A live graphical session. `computer-use` talks to the compositor through the
 portal, so it must run inside the user's session, not as a system service. That
 means:
 
@@ -51,15 +52,15 @@ cargo build --release --no-default-features
 
 ## Use
 
-`desktop-use` is an MCP server that speaks the protocol over stdin and stdout,
+`computer-use` is an MCP server that speaks the protocol over stdin and stdout,
 so an MCP client launches it rather than a person. A client configuration looks
 like this:
 
 ```json
 {
   "mcpServers": {
-    "desktop-use": {
-      "command": "desktop-use",
+    "computer-use": {
+      "command": "computer-use",
       "args": []
     }
   }
@@ -76,20 +77,39 @@ like this:
 
 ### Tools
 
+The tool names follow the [Claude computer
+use](https://docs.claude.com/en/docs/agents-and-tools/tool-use/computer-use-tool)
+toolset, so a model that knows that vocabulary transfers to this one. The
+coordinates do not follow it — see [Coordinates](#coordinates).
+
 | Tool | Purpose |
 | --- | --- |
-| `get_display_info` | The captured region's size and position, the stream size, the scale factor, the pointer position, and whether input injection is available here. |
 | `screenshot` | The desktop as an image, plus the metadata needed to act on what it shows. |
-| `mouse_move` | Move the pointer to a position in logical desktop coordinates. |
-| `mouse_click` | Click a button — `left`, `right`, or `middle` — `count` times, optionally moving there first. |
-| `mouse_scroll` | Scroll along an axis, in whole wheel steps; negative scrolls up or left. |
-| `type_text` | Type a UTF-8 string into whatever currently has focus. |
-| `key_press` | Press a key combination, such as `ctrl+shift+t`. |
+| `zoom` | One region of the desktop at full resolution, for text a full screenshot makes illegible. |
+| `get_display_info` | The captured region's size and position, the stream size, the scale factor, the pointer position, and whether input injection is available here. |
+| `cursor_position` | Where the pointer is, in logical desktop coordinates. |
+| `mouse_move` | Move the pointer to `coordinate`. |
+| `left_click` | Click the primary button, optionally at a `coordinate` and with `modifiers`. |
+| `right_click` | Click the secondary button, optionally at a `coordinate` and with `modifiers`. |
+| `middle_click` | Click the middle button, optionally at a `coordinate` and with `modifiers`. |
+| `double_click` | Double-click the primary button, optionally at a `coordinate`. |
+| `triple_click` | Triple-click the primary button, optionally at a `coordinate`. |
+| `left_click_drag` | Drag with the primary button from `start_coordinate` to `coordinate`. |
+| `left_mouse_down` | Press the primary button and leave it down. |
+| `left_mouse_up` | Release the primary button. |
+| `scroll` | Scroll `scroll_amount` wheel steps in a `scroll_direction`, optionally at a `coordinate`. |
+| `type` | Type a UTF-8 string into whatever currently has focus. |
+| `key` | Press a key or combination, `repeat` times. |
+| `hold_key` | Hold a key or combination for `duration` seconds. |
+| `wait` | Pause for `duration` seconds. |
+| `wait_for_change` | Wait until the screen changes, or until `timeout` seconds pass. |
 
-`screenshot` takes `max_dimension` (long-edge cap, default 1568), `format`
-(`png` by default, or `jpeg`) and `quality` for JPEG. `--max-dimension` and
-`--format` set the defaults for a whole session, so a client need not repeat them
-on every call.
+`screenshot` and `zoom` both take `max_dimension` (long-edge cap, default 1568),
+`format` (`png` by default, or `jpeg`) and `quality` for JPEG. `--max-dimension`
+and `--format` set the defaults for a whole session, so a client need not repeat
+them on every call. The two differ in what the cap is spent on: `screenshot`
+reduces the whole desktop to fit it, while `zoom` crops `region` first and then
+reduces, so a small area comes back at full resolution.
 
 A screenshot resamples and compresses, which is exactly the work that
 optimisation transforms: the same call takes about 2.5 s in a debug build and
@@ -100,12 +120,25 @@ mislead by an order of magnitude.
 metadata report, so a position read off an image is passed here unchanged. The
 metadata's `image_to_logical_scale` is what maps the two.
 
-### Key combinations
+**Held and drag interactions.** `left_click_drag` presses at
+`start_coordinate`, moves to `coordinate` in steps so applications that wait for
+movement still see a drag, and releases. When one gesture is not enough — a
+freehand path, or a press that has to survive several calls — use
+`left_mouse_down`, move the pointer with `mouse_move`, then `left_mouse_up`.
 
-`key_press` writes a shortcut the way it is spoken: `ctrl+shift+t`, `alt+F2`,
-`super`, `ctrl+plus`. Names are case-insensitive. The modifiers are `ctrl` (or
-`control`), `shift`, `alt` (or `option`), and `super` (or `meta`, `win`, `cmd`).
-A bare modifier is a key in its own right, so `super` alone opens the overview.
+**Waiting.** Prefer `wait_for_change` to `wait` whenever the thing being waited
+for is visible: it returns as soon as the screen changes, which removes the race
+a fixed delay leaves. `min_change` is the fraction of sampled pixels that must
+differ, defaulting to a value above a blinking caret's footprint. Use `wait` for
+a delay, or when nothing on screen will change.
+
+### Keys, combinations, and modifiers
+
+`key` and `hold_key` write a shortcut the way it is spoken: `ctrl+shift+t`,
+`alt+F2`, `super`, `ctrl+plus`. Names are case-insensitive. The modifiers are
+`ctrl` (or `control`), `shift`, `alt` (or `option`), and `super` (or `meta`,
+`win`, `cmd`). A bare modifier is a key in its own right, so `super` alone opens
+the overview, and `key: shift` is meaningful.
 
 The key itself is a single character, a named key, or `f1` through `f35`. The
 named keys are `enter`, `tab`, `escape`, `space`, `backspace`, `delete`,
@@ -115,9 +148,19 @@ confusing as a literal — `plus`, `minus`, `comma`, `period`, `slash`,
 `semicolon`, `apostrophe`, `grave`, `bracketleft`, `bracketright`, `backslash`,
 `equal` — is written by name, because a literal `+` would read as a separator.
 
-`type_text` is deliberately separate from `key_press`: typing a string is layout-
-and Unicode-sensitive where a shortcut is not. Latin-1 characters map to their
-own keysyms and everything else uses the Unicode convention, so an agent can type
+`key` accepts `repeat`, which presses the whole combination that many times —
+the way to step through a form or a list with `tab` or an arrow key. `hold_key`
+presses and holds for `duration` seconds instead, which is what drives key
+auto-repeat; that is how a held arrow key scrolls a list continuously.
+
+The click, drag, and scroll tools take `modifiers` separately, holding them for
+that action alone. `left_click` with `modifiers: shift` extends a selection and
+with `modifiers: ctrl` toggles one item in a multi-select, and a modifier is
+released even when the action fails, so nothing stays stuck down.
+
+`type` is deliberately separate from `key`: typing a string is layout- and
+Unicode-sensitive where a shortcut is not. Latin-1 characters map to their own
+keysyms and everything else uses the Unicode convention, so an agent can type
 text its keyboard layout could not produce.
 
 ### Compositor support
@@ -165,6 +208,18 @@ bug in the portal, not here; the input tools report it as an error naming the
 position rather than moving the pointer somewhere else. At a scale factor of 1.0
 the whole desktop is reachable.
 
+The tool names follow the computer use vocabulary, but the coordinates do not:
+that toolset takes positions in the pixel space of the screenshot it returns,
+while every coordinate here is a logical desktop coordinate. A position read from
+a screenshot's metadata is passed to `left_click` and the other input tools
+unchanged.
+
+**The pointer position is where this server last put it, not where it actually
+is.** The portal's RemoteDesktop interface does not report the pointer, so
+`cursor_position` and the metadata's `pointer` field are at best the last position
+commanded. Before anything has moved the pointer they report that it is unknown
+rather than guessing.
+
 ### The preview window
 
 `--preview` opens a window showing the frames the model is looking at, so the
@@ -190,7 +245,7 @@ tracked as a deferred item in the
 Capture and input are requested on a single portal session, so the user approves
 both at once rather than being asked twice. The answer is persisted through the
 portal and the resulting token is kept under
-`$XDG_STATE_HOME/desktop-use/restore-token`, so later runs do not prompt again.
+`$XDG_STATE_HOME/computer-use/restore-token`, so later runs do not prompt again.
 If the user revokes it, the portal rejects the stored token and the server asks
 anew.
 
@@ -220,11 +275,11 @@ how the pixel layout was confirmed.
 ### Logging
 
 Logs go to **stderr only** — stdout is the MCP channel, and anything else there
-would corrupt the protocol. Set `DESKTOP_USE_LOG` to change the filter, which
+would corrupt the protocol. Set `COMPUTER_USE_LOG` to change the filter, which
 defaults to `info`:
 
 ```sh
-DESKTOP_USE_LOG=debug desktop-use
+COMPUTER_USE_LOG=debug computer-use
 ```
 
 ## Layout
@@ -239,7 +294,7 @@ src/
 ├── session.rs     graphical-session checks
 ├── mcp.rs         the MCP server and its tool router
 ├── preview.rs     the --preview window and the pump that feeds it
-├── tools.rs       the tools: encoding, downscaling, coordinates, arguments
+├── tools.rs       the tools: encoding, cropping, coordinates, arguments
 └── backend/
     ├── capture.rs       the CaptureBackend trait and its value types
     ├── input.rs         the InputBackend trait

@@ -30,7 +30,17 @@ did not cover, and that is not needed to demonstrate the project's value:
 
 | Change request | Kind | Priority | State |
 | --- | --- | --- | --- |
+| [Expand the tool surface](expand-tool-surface.md) | feature | high | in-progress |
 | [Import DMA-BUF frames](dma-buf-frame-import.md) | feature | medium | proposed |
+| [Recover input when the portal session closes](recover-closed-portal-session.md) | bug | medium | proposed |
+| [Document the pointer position limit](document-pointer-position-limit.md) | improvement | low | proposed |
+| [Rename the project to computer-use](rename-project-to-computer-use.md) | refactor | medium | done |
+
+[Expand the tool surface](expand-tool-surface.md) is the follow-up the first
+milestone left: its action tools pressed and released within a single call, so the
+desktop could be clicked but not dragged, selected, or held. It is implemented and
+its tests pass, and is `in-progress` only until the behaviour is confirmed on a
+live session.
 
 [Import DMA-BUF frames](dma-buf-frame-import.md) was split out of the capture
 backend rather than left to block it: the criterion it came from asked for frames

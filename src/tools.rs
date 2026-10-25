@@ -17,7 +17,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::backend::capture::{CaptureInfo, Frame};
-use crate::backend::input::{Axis, Button};
+use crate::backend::input::Axis;
 use crate::cli::{DEFAULT_MAX_DIMENSION, ImageFormat};
 use crate::error::Error;
 
@@ -141,100 +141,227 @@ impl ScreenshotMetadata {
             elapsed_ms: elapsed.as_millis() as u64,
         }
     }
+
+    /// Describe a region of a frame that was cropped and then reduced to fit.
+    ///
+    /// `origin` and `logical_size` place the region in logical desktop
+    /// coordinates, and `stream_size` is how large that region is in the frame's
+    /// pixels. `image_to_logical_scale` is computed from `stream_size` and the
+    /// returned image, so a position read off a zoomed image maps back onto the
+    /// desktop exactly as one read off a full screenshot does.
+    #[allow(clippy::too_many_arguments)]
+    pub fn for_region(
+        info: &CaptureInfo,
+        origin: (i32, i32),
+        logical_size: (u32, u32),
+        stream_size: (u32, u32),
+        image_size: (u32, u32),
+        format: ImageFormat,
+        elapsed: Duration,
+    ) -> Self {
+        Self {
+            origin,
+            logical_size,
+            stream_size,
+            scale_factor: info.scale_factor,
+            image_size,
+            image_to_logical_scale: image_to_logical_scale(
+                stream_size,
+                image_size,
+                info.scale_factor,
+            ),
+            pointer: info.pointer,
+            format: format.mime_type().to_string(),
+            elapsed_ms: elapsed.as_millis() as u64,
+        }
+    }
 }
 
 /// The arguments `mouse_move` accepts.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct MouseMoveArgs {
-    /// Horizontal position in logical desktop coordinates.
-    pub x: f64,
-    /// Vertical position in logical desktop coordinates.
-    pub y: f64,
+    /// Where to move the pointer, as `[x, y]` in logical desktop coordinates.
+    pub coordinate: [f64; 2],
 }
 
-/// A pointer button, as named on the command surface.
+/// The arguments the click tools accept.
+///
+/// One type for `left_click`, `right_click`, `middle_click`, `double_click`, and
+/// `triple_click`: they differ only in which button and how many times, and
+/// naming them separately — as the computer-use tools do — is what makes them
+/// readable in a transcript.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct ClickArgs {
+    /// Where to click, as `[x, y]` in logical desktop coordinates. Omitted clicks
+    /// wherever the pointer already is.
+    #[serde(default)]
+    pub coordinate: Option<[f64; 2]>,
+
+    /// Modifier keys to hold for the click: `shift`, `ctrl`, `alt`, `super`, or a
+    /// `+`-joined combination such as `ctrl+shift`.
+    #[serde(default)]
+    pub modifiers: Option<String>,
+}
+
+/// The arguments `left_click_drag` accepts.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DragArgs {
+    /// Where the drag starts, as `[x, y]` in logical desktop coordinates.
+    pub start_coordinate: [f64; 2],
+
+    /// Where the drag ends, as `[x, y]` in logical desktop coordinates.
+    pub coordinate: [f64; 2],
+
+    /// Modifier keys to hold for the drag.
+    #[serde(default)]
+    pub modifiers: Option<String>,
+}
+
+/// The direction `scroll` moves the view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
-pub enum ButtonArg {
-    /// The primary button.
+pub enum ScrollDirection {
+    /// Towards the top of the content.
+    Up,
+    /// Towards the bottom of the content.
+    Down,
+    /// Towards the left of the content.
     Left,
-    /// The middle button.
-    Middle,
-    /// The secondary button.
+    /// Towards the right of the content.
     Right,
 }
 
-impl From<ButtonArg> for Button {
-    fn from(button: ButtonArg) -> Self {
-        match button {
-            ButtonArg::Left => Self::Left,
-            ButtonArg::Middle => Self::Middle,
-            ButtonArg::Right => Self::Right,
+impl ScrollDirection {
+    /// The axis to scroll along and the signed amount in wheel steps.
+    ///
+    /// The backend keeps the wheel's sign convention — negative is up or left —
+    /// so the direction turns into that sign here and a caller never writes a
+    /// negative number to mean "down".
+    pub fn axis_and_amount(self, amount: f64) -> (Axis, f64) {
+        match self {
+            Self::Up => (Axis::Vertical, -amount),
+            Self::Down => (Axis::Vertical, amount),
+            Self::Left => (Axis::Horizontal, -amount),
+            Self::Right => (Axis::Horizontal, amount),
+        }
+    }
+
+    /// The direction's name, as the tools' replies spell it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
         }
     }
 }
 
-/// The arguments `mouse_click` accepts.
-#[derive(Debug, Default, Deserialize, JsonSchema)]
-pub struct MouseClickArgs {
-    /// Which button to click. Defaults to the primary button.
-    #[serde(default)]
-    pub button: Option<ButtonArg>,
-    /// How many times to click. Defaults to once; two is a double click.
-    #[serde(default)]
-    pub count: Option<u8>,
-    /// Horizontal position to move to first, in logical desktop coordinates.
-    #[serde(default)]
-    pub x: Option<f64>,
-    /// Vertical position to move to first, in logical desktop coordinates.
-    #[serde(default)]
-    pub y: Option<f64>,
-}
-
-/// The axis a scroll applies to, as named on the command surface.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum AxisArg {
-    /// Up and down.
-    Vertical,
-    /// Left and right.
-    Horizontal,
-}
-
-impl From<AxisArg> for Axis {
-    fn from(axis: AxisArg) -> Self {
-        match axis {
-            AxisArg::Vertical => Self::Vertical,
-            AxisArg::Horizontal => Self::Horizontal,
-        }
-    }
-}
-
-/// The arguments `mouse_scroll` accepts.
+/// The arguments `scroll` accepts.
 #[derive(Debug, Deserialize, JsonSchema)]
-pub struct MouseScrollArgs {
-    /// Which axis to scroll along. Defaults to vertical.
+pub struct ScrollArgs {
+    /// Which way to scroll.
+    pub scroll_direction: ScrollDirection,
+
+    /// How many wheel steps to scroll, as a positive number.
+    pub scroll_amount: f64,
+
+    /// Where to scroll, as `[x, y]` in logical desktop coordinates. Omitted
+    /// scrolls wherever the pointer already is.
     #[serde(default)]
-    pub axis: Option<AxisArg>,
-    /// How many wheel steps to scroll. Negative scrolls the other way, and
-    /// fractions are rounded to whole steps.
-    pub amount: f64,
+    pub coordinate: Option<[f64; 2]>,
+
+    /// Modifier keys to hold for the scroll.
+    #[serde(default)]
+    pub modifiers: Option<String>,
 }
 
-/// The arguments `type_text` accepts.
+/// The arguments `type` accepts.
 #[derive(Debug, Deserialize, JsonSchema)]
-pub struct TypeTextArgs {
+pub struct TypeArgs {
     /// The text to type into whatever has focus.
     pub text: String,
 }
 
-/// The arguments `key_press` accepts.
+/// The arguments `key` accepts.
 #[derive(Debug, Deserialize, JsonSchema)]
-pub struct KeyPressArgs {
-    /// The combination to press, such as `ctrl+shift+t`, `enter`, or `super`.
-    /// Modifiers are `ctrl`, `shift`, `alt`, and `super`.
-    pub combination: String,
+pub struct KeyArgs {
+    /// The key or combination to press, such as `ctrl+shift+t`, `enter`, or
+    /// `super`. Modifiers are `ctrl`, `shift`, `alt`, and `super`.
+    pub text: String,
+
+    /// How many times to press it, 1 to 100. Defaults to once.
+    #[serde(default)]
+    pub repeat: Option<u8>,
 }
+
+/// The arguments `hold_key` accepts.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct HoldKeyArgs {
+    /// The key or combination to hold, such as `down` or `shift`.
+    pub text: String,
+
+    /// How long to hold it, in seconds, up to 300.
+    pub duration: f64,
+}
+
+/// The arguments `zoom` accepts.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ZoomArgs {
+    /// The region to capture, as `[x0, y0, x1, y1]` — the top-left and
+    /// bottom-right corners in logical desktop coordinates.
+    pub region: [f64; 4],
+
+    /// Long-edge cap for the returned image, as in `screenshot`.
+    #[serde(default)]
+    pub max_dimension: Option<u32>,
+
+    /// Image format, as in `screenshot`.
+    #[serde(default)]
+    pub format: Option<ScreenshotFormat>,
+
+    /// JPEG quality, 1 to 100, as in `screenshot`.
+    #[serde(default)]
+    pub quality: Option<u8>,
+}
+
+/// The arguments `wait` accepts.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WaitArgs {
+    /// How long to wait, in seconds, up to 300.
+    pub duration: f64,
+}
+
+/// The arguments `wait_for_change` accepts.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WaitForChangeArgs {
+    /// How long to wait for a change, in seconds, up to 300.
+    pub timeout: f64,
+
+    /// The fraction of sampled pixels that must differ before the screen counts
+    /// as changed. Defaults to a value above a blinking caret's footprint.
+    #[serde(default)]
+    pub min_change: Option<f64>,
+}
+
+/// The longest `duration` or `timeout` a timing tool accepts, in seconds.
+pub const MAX_WAIT_SECONDS: f64 = 300.0;
+
+/// How long `wait_for_change` sleeps between checks.
+pub const WAIT_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// The fraction of sampled pixels that must differ before `wait_for_change`
+/// calls the screen changed.
+///
+/// Above a blinking text caret's footprint, so a caret does not read as a
+/// change; a panel or a menu opening is many times larger.
+pub const DEFAULT_MIN_CHANGE: f64 = 0.001;
+
+/// How far a colour channel must move before a pixel counts as changed.
+const CHANGE_CHANNEL_TOLERANCE: u8 = 8;
+
+/// The most pixels `changed_fraction` samples, so the poll stays cheap.
+const CHANGE_SAMPLES: usize = 100_000;
 
 /// What `get_display_info` reports.
 ///
@@ -366,6 +493,93 @@ pub fn encode(frame: &Frame, format: ImageFormat, quality: u8) -> Result<Vec<u8>
 /// Base64, which is how MCP carries image bytes.
 pub fn to_base64(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+/// A seconds argument as a `Duration`, checked and capped.
+///
+/// Shared by `wait` and `hold_key`, which both take a number of seconds. A
+/// negative or non-finite one is a caller mistake worth naming rather than
+/// quietly treating as zero.
+pub fn seconds_to_duration(seconds: f64, name: &str) -> Result<Duration, String> {
+    if !seconds.is_finite() || seconds < 0.0 {
+        return Err(format!(
+            "`{name}` must be a number of seconds, not {seconds}"
+        ));
+    }
+    Ok(Duration::from_secs_f64(seconds.min(MAX_WAIT_SECONDS)))
+}
+
+/// Copy the `width`x`height` rectangle at `(x, y)` out of a frame.
+///
+/// The coordinates are in the frame's own pixels, so the caller converts from
+/// logical desktop coordinates first. This is what `zoom` is built on: a region
+/// keeps its resolution where the whole desktop would have been reduced.
+pub fn crop(frame: &Frame, x: u32, y: u32, width: u32, height: u32) -> Result<Frame, Error> {
+    let fits = width > 0
+        && height > 0
+        && x.checked_add(width)
+            .is_some_and(|right| right <= frame.width)
+        && y.checked_add(height)
+            .is_some_and(|bottom| bottom <= frame.height);
+    if !fits || !frame.is_well_formed() {
+        return Err(Error::Capture(format!(
+            "the region ({x}, {y}) {width}x{height} is not inside the {}x{} frame",
+            frame.width, frame.height
+        )));
+    }
+
+    let source_stride = frame.width as usize * Frame::BYTES_PER_PIXEL;
+    let row_bytes = width as usize * Frame::BYTES_PER_PIXEL;
+    let mut rgb = Vec::with_capacity(row_bytes * height as usize);
+    for row in y..y + height {
+        let start = row as usize * source_stride + x as usize * Frame::BYTES_PER_PIXEL;
+        rgb.extend_from_slice(&frame.rgb[start..start + row_bytes]);
+    }
+
+    Ok(Frame { width, height, rgb })
+}
+
+/// The fraction of sampled pixels that differ between two frames.
+///
+/// Sampled rather than exhaustive because this runs inside a polling loop: a
+/// change worth waking for shows up across a fraction of the pixels, so examining
+/// a bounded number of them costs little and decides the same question. Frames of
+/// different sizes count as entirely changed.
+pub fn changed_fraction(before: &Frame, after: &Frame) -> f64 {
+    if (before.width, before.height) != (after.width, after.height)
+        || !before.is_well_formed()
+        || !after.is_well_formed()
+    {
+        return 1.0;
+    }
+
+    let pixels = before.width as usize * before.height as usize;
+    if pixels == 0 {
+        return 0.0;
+    }
+
+    let step = pixels.div_ceil(CHANGE_SAMPLES).max(1);
+    let mut sampled = 0usize;
+    let mut changed = 0usize;
+    let mut index = 0usize;
+    while index < pixels {
+        let offset = index * Frame::BYTES_PER_PIXEL;
+        let differs = (0..Frame::BYTES_PER_PIXEL).any(|channel| {
+            before.rgb[offset + channel].abs_diff(after.rgb[offset + channel])
+                > CHANGE_CHANNEL_TOLERANCE
+        });
+        if differs {
+            changed += 1;
+        }
+        sampled += 1;
+        index += step;
+    }
+
+    if sampled == 0 {
+        0.0
+    } else {
+        changed as f64 / sampled as f64
+    }
 }
 
 /// The error for a frame whose pixel buffer does not match its dimensions.
@@ -504,7 +718,7 @@ mod tests {
 
     #[test]
     fn base64_output_is_standard_base64() {
-        assert_eq!(to_base64(b"desktop-use"), "ZGVza3RvcC11c2U=");
+        assert_eq!(to_base64(b"computer-use"), "Y29tcHV0ZXItdXNl");
     }
 
     #[test]
@@ -533,5 +747,130 @@ mod tests {
         assert_eq!(metadata.format, "image/png");
         assert_eq!(metadata.elapsed_ms, 123);
         assert!((metadata.image_to_logical_scale - (2560.0 / 1568.0) * 0.6).abs() < 1e-9);
+    }
+
+    #[test]
+    fn region_metadata_maps_a_zoomed_pixel_back_to_the_desktop() {
+        let info = CaptureInfo {
+            logical_size: (1000, 800),
+            stream_size: (2000, 1600),
+            origin: (0, 0),
+            scale_factor: 2.0,
+            pointer: Some((10.0, 20.0)),
+            input_available: true,
+        };
+
+        let metadata = ScreenshotMetadata::for_region(
+            &info,
+            (50, 25),
+            (200, 100),
+            (400, 200),
+            (200, 100),
+            ImageFormat::Png,
+            Duration::from_millis(5),
+        );
+
+        assert_eq!(metadata.origin, (50, 25));
+        assert_eq!(metadata.logical_size, (200, 100));
+        assert_eq!(metadata.stream_size, (400, 200));
+        assert_eq!(metadata.pointer, Some((10.0, 20.0)));
+        // 400 stream pixels reduced to 200 image pixels, over a scale factor of 2.
+        assert!((metadata.image_to_logical_scale - 1.0).abs() < 1e-9);
+        assert!((200.0 * metadata.image_to_logical_scale - 200.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cropping_takes_the_requested_rectangle() {
+        let source = Frame {
+            width: 3,
+            height: 2,
+            rgb: vec![
+                1, 2, 3, 4, 5, 6, 7, 8, 9, //
+                10, 11, 12, 13, 14, 15, 16, 17, 18,
+            ],
+        };
+
+        let region = crop(&source, 1, 0, 2, 2).expect("a crop");
+        assert_eq!((region.width, region.height), (2, 2));
+        assert_eq!(region.rgb, vec![4, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 18]);
+    }
+
+    #[test]
+    fn a_region_outside_the_frame_is_refused() {
+        let source = frame(4, 4);
+        assert!(crop(&source, 3, 0, 2, 1).is_err(), "past the right edge");
+        assert!(crop(&source, 0, 3, 1, 2).is_err(), "past the bottom edge");
+        assert!(crop(&source, 0, 0, 0, 1).is_err(), "an empty region");
+        assert!(crop(&source, 0, 0, 4, 4).is_ok(), "the whole frame");
+    }
+
+    #[test]
+    fn identical_frames_have_not_changed() {
+        let before = frame(32, 32);
+        assert_eq!(changed_fraction(&before, &before.clone()), 0.0);
+    }
+
+    #[test]
+    fn a_frame_that_differs_everywhere_has_changed_completely() {
+        let before = frame(32, 32);
+        let after = Frame {
+            width: 32,
+            height: 32,
+            rgb: vec![0xff; Frame::expected_len(32, 32)],
+        };
+        assert_eq!(changed_fraction(&before, &after), 1.0);
+    }
+
+    #[test]
+    fn a_difference_below_the_channel_tolerance_is_not_a_change() {
+        let before = frame(64, 64);
+        let mut after = before.clone();
+        // Every channel shifts by the tolerance and no more, the size of change a
+        // caret's antialiasing makes; none of it counts.
+        for byte in after.rgb.iter_mut() {
+            *byte = byte.saturating_add(CHANGE_CHANNEL_TOLERANCE);
+        }
+        assert_eq!(changed_fraction(&before, &after), 0.0);
+    }
+
+    #[test]
+    fn frames_of_different_sizes_count_as_changed() {
+        assert_eq!(changed_fraction(&frame(8, 8), &frame(8, 9)), 1.0);
+    }
+
+    #[test]
+    fn a_seconds_argument_is_capped_and_checked() {
+        assert_eq!(
+            seconds_to_duration(1.5, "duration").expect("a duration"),
+            Duration::from_secs_f64(1.5)
+        );
+        assert_eq!(
+            seconds_to_duration(10_000.0, "duration").expect("a duration"),
+            Duration::from_secs_f64(MAX_WAIT_SECONDS)
+        );
+        assert!(seconds_to_duration(-1.0, "duration").is_err());
+        assert!(seconds_to_duration(f64::NAN, "duration").is_err());
+    }
+
+    #[test]
+    fn a_scroll_direction_carries_its_own_sign() {
+        assert_eq!(
+            ScrollDirection::Up.axis_and_amount(3.0),
+            (Axis::Vertical, -3.0)
+        );
+        assert_eq!(
+            ScrollDirection::Down.axis_and_amount(3.0),
+            (Axis::Vertical, 3.0)
+        );
+        assert_eq!(
+            ScrollDirection::Left.axis_and_amount(2.0),
+            (Axis::Horizontal, -2.0)
+        );
+        assert_eq!(
+            ScrollDirection::Right.axis_and_amount(2.0),
+            (Axis::Horizontal, 2.0)
+        );
+        assert_eq!(ScrollDirection::Right.name(), "right");
+        assert_eq!(ScrollDirection::Left.name(), "left");
     }
 }

@@ -1,6 +1,6 @@
-# desktop-use
+# computer-use
 
-`desktop-use` is an MCP server that lets an AI agent observe and control a
+`computer-use` is an MCP server that lets an AI agent observe and control a
 Wayland Linux desktop. It captures the screen through the XDG Desktop Portal and
 PipeWire, and injects pointer and keyboard input through the portal's
 RemoteDesktop interface, exposing both as MCP tools over stdio.
